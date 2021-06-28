@@ -78,6 +78,19 @@ def _populate_cache(cache, nodes=(), field=None):
             cache[n][field] = False
         for n in cmds.ls(referencedNodes=True, long=True):
             cache[n][field] = True
+    elif field == 'layer':
+        for n in cache.keys():
+            cache[n][field] = None
+        items = {
+            n: c for c in cmds.ls(type='displayLayer', long=True)
+            for n in cmds.ls(
+                cmds.listConnections(c + '.drawInfo', d=True, s=False) or [],
+                long=True)
+        }
+        for n, l in sorted(items.items(), reverse=True):
+            for k, v in cache.items():
+                if k.startswith(n):
+                    v[field] = l
 
     for n in nodes:
         if field in cache[n]:
@@ -119,7 +132,7 @@ def _populate_cache(cache, nodes=(), field=None):
                     # normalize to strings
                     value = str(cmds.getAttr(n + '.' + attr))
             else:
-	            raise NotImplementedError('field {!r}'.format(field))
+                raise NotImplementedError('field {!r}'.format(field))
         cache[n][field] = value
 
 
