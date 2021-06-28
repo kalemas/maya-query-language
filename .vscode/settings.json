@@ -1,0 +1,9 @@
+{
+    "python.pythonPath": "c:\\Program Files\\Autodesk\\Maya2022\\bin\\mayapy.exe",
+    "files.exclude": {
+        "**/.git": true,
+        "**/.*_cache": true,
+        "**/*.egg-info": true,
+        "**/__pycache__": true,
+    }
+}
