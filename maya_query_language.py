@@ -1,7 +1,11 @@
+import logging
 import operator
 
 import pymel.core as pm
 from pyparsing import *
+
+
+logger = logging.getLogger(__name__)
 
 
 class ClauseExpression:
@@ -47,7 +51,6 @@ def _populate_cache(cache, nodes=(), field=None):
         cache.update({n: {'name': n.nodeName()} for n in pm.ls()})
     if field in {'allsets'}:
         _populate_cache(cache, cache.keys(), 'sets')
-        _populate_cache(cache, cache.keys(), 'type')
         for k, v in cache.items():
             allsets = list(v['sets'])
             for s in allsets:
@@ -109,55 +112,24 @@ def _handle_expression(result, cache):
                     cache,
                     {cc for c in relationship.values() for cc in c if cc},
                     field)
-                if field == 'name':
+                if field in {'name', 'type'}:
                     relationship = {
-                        n: {cache[cc]['name'] for cc in c if cc
-                           } for n, c in relationship.items()
+                        n: {cache[cc][field] for cc in c if cc
+                            } for n, c in relationship.items()
                     }
-                elif field == 'type':
-                    relationship = {
-                        n: {cache[cc]['type'] for cc in c if cc
-                           } for n, c in relationship.items()
-                    }
-                elif field == 'types':
-                    relationship = {
-                        n:
-                        {ccc for cc in c if cc
-                         for ccc in cache[cc]['types']}
-                        for n, c in relationship.items()
-                    }
-                elif field in {'sets', 'allsets'}:
+                elif field in {
+                        'allsets', 'children', 'sets', 'shapes', 'types'
+                }:
                     relationship = {
                         n: {ccc for cc in c if cc
                             for ccc in cache[cc][field]}
                         for n, c in relationship.items()
                     }
-                elif field == 'layer':
-                    relationship = {
-                        n: {
-                            ccc for cc in c
-                            if cc for ccc in [cache[cc][field]]
-                        } for n, c in relationship.items()
-                    }
-                elif field == 'parent':
-                    relationship = {
-                        n: {
-                            ccc for cc in c
-                            if cc for ccc in [cache[cc][field]]
-                        } for n, c in relationship.items()
-                    }
-                elif field == 'children':
-                    relationship = {
-                        n: {
-                            ccc for cc in c
-                            if cc for ccc in cache[cc]['children']
-                        } for n, c in relationship.items()
-                    }
-                elif field == 'shapes':
+                elif field in {'layer', 'parent'}:
                     relationship = {
                         n:
                         {ccc for cc in c if cc
-                         for ccc in cache[cc]['shapes']}
+                         for ccc in [cache[cc][field]]}
                         for n, c in relationship.items()
                     }
                 relationship = {n: c for n, c in relationship.items() if c}
@@ -194,14 +166,15 @@ def query(expression, cache=None):
 
 
 if __name__ in '__main__':
+    cache = {}
     for i in [
             # 'name is persp',
             # 'name in (persp, top)',
             # 'name is top or name is persp',
             # 'name in (persp, top, front) and (name is top or name is persp)',
-            # '(name in (persp, perspShape)) and (type in (camera))'
-            ('type is transform and shapes.type not_in (nurbsCurve) and '
-             'parent is none and shapes.type is_not camera'),
+            # '(name in (persp, perspShape)) and (type in (camera))',
+            # ('type is transform and shapes.type not_in (nurbsCurve) and '
+            #  'parent is none and shapes.type is_not camera'),
             # 'type is nurbsCurve and parent.sets.name is AnimationSet',
             # 'allsets.name is AnimationSet',
             # 'shapes.type is_not nurbsCurve and sets.name is AnimationSet',
@@ -211,8 +184,13 @@ if __name__ in '__main__':
             # 'sets.name is set1 and layer.name is layer1',
             # 'name is root and parent is none',
             # 'parent.name is root',
-            # 'parent is none',
-            # 'types is dagNode',
-            # 'parent.parent is none',
+            'parent is none',
+            'types is dagNode',
+            'parent.parent is none',
     ]:
-        print('{}:\n\t{}'.format(i, query(i)))
+        logger.info('%s', i)
+        logger.info('    %s', query(i, cache=cache))
+    logger.info('pm.ls()')
+    logger.info('    %s', pm.ls())
+    logger.info('pm.ls(type="transform")')
+    logger.info('    %s', pm.ls(type='transform'))
