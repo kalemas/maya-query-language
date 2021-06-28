@@ -1,8 +1,11 @@
 import logging
 import operator
+import time
+import re
 
-import pymel.core as pm
-from pyparsing import *
+from maya import cmds  # NOTE pymel was slow in 20 times
+from pyparsing import (alphanums, delimitedList, infixNotation, oneOf, opAssoc,
+                       Suppress, Word, quotedString, removeQuotes)
 
 
 logger = logging.getLogger(__name__)
@@ -21,13 +24,14 @@ class ClauseExpression:
 
 
 def _build_parser():
-    field = Word(alphanums + '.')('field')
-    operators = oneOf(['is', 'is_not', '>', '<'])('operator')
+    field = Word(alphanums + '.()')('field')
+    operators = oneOf(['is', 'is_not', '>', '<', 'match'])('operator')
     container_operators = oneOf(['in', 'not_in'])('operator')
     value = Word(alphanums)('value')
+    quoted_value = quotedString('value').setParseAction(removeQuotes)
     container_value = Suppress('(') + delimitedList(value)('value') + Suppress(
         ')')
-    standard_condition = field + operators + value
+    standard_condition = field + operators + (value | quoted_value)
     container_condition = field + container_operators + container_value
     condition = (standard_condition | container_condition)
 
@@ -45,10 +49,18 @@ join_operators = {
     'or': operator.or_,
 }
 
+value_mapping = {
+    'none': None,
+    'false': False,
+    'true': True,
+}
+
 
 def _populate_cache(cache, nodes=(), field=None):
     if not cache:
-        cache.update({n: {'name': n.nodeName()} for n in pm.ls()})
+        ls = cmds.ls(showType=True, long=True)
+        for n, t in zip(ls[::2], ls[1::2]):
+            cache[n] = {'name': n.split('|')[-1], 'type': t}
     if field in {'allsets'}:
         _populate_cache(cache, cache.keys(), 'sets')
         for k, v in cache.items():
@@ -56,36 +68,58 @@ def _populate_cache(cache, nodes=(), field=None):
             for s in allsets:
                 allsets.extend(cache[s]['sets'])
             cache[k]['allsets'] = set(allsets)
+    elif field == 'default':
+        for n in cache.keys():
+            cache[n][field] = False
+        for n in cmds.ls(defaultNodes=True, long=True):
+            cache[n][field] = True
+    elif field == 'referenced':
+        for n in cache.keys():
+            cache[n][field] = False
+        for n in cmds.ls(referencedNodes=True, long=True):
+            cache[n][field] = True
 
     for n in nodes:
         if field in cache[n]:
             continue
         value = None
-        if field == 'type':
-            value = n.nodeType()
-        elif field == 'types':
-            value = n.nodeType(inherited=True)
+        if field == 'types':
+            value = cmds.nodeType(n, inherited=True)
         elif field == 'sets':
-            if n.hasAttr('instObjGroups'):
-                value = n.instObjGroups.outputs(type='objectSet')
-            value = set(value or [])
-            value.update(n.message.outputs(type='objectSet'))
+            if cmds.attributeQuery('instObjGroups', node=n, exists=True):
+                value = cmds.listConnections(n + '.instObjGroups',
+                                             d=True,
+                                             s=False,
+                                             type='objectSet')
+            value = set(value if value else [])
+            value.update(
+                cmds.listConnections(
+                    n + '.message', d=True, s=False, type='objectSet') or [])
         elif field == 'layer':
-            if n.hasAttr('drawOverride'):
-                value = (n.drawOverride.inputs(type='displayLayer') +
-                         [None])[0]
+            if cmds.attributeQuery('drawOverride', node=n, exists=True):
+                value = cmds.listConnections(n + '.drawOverride',
+                                             d=False,
+                                             s=True,
+                                             type='displayLayer')
+            value = value[0] if value else None
         elif field == 'parent':
-            if hasattr(n, 'getParent'):
-                value = n.getParent()
+            value = cmds.listRelatives(n, fullPath=True, parent=True)
+            if value:
+                value = value[0]
         elif field == 'children':
-            if hasattr(n, 'getChildren'):
-                value = n.getChildren()
+            value = cmds.listRelatives(n, fullPath=True, children=True)
+            value = set(value if value else [])
         elif field == 'shapes':
-            if hasattr(n, 'getShapes'):
-                value = n.getShapes()
-            value = set(value or [])
+            value = cmds.listRelatives(n, fullPath=True, shapes=True)
+            value = set(value if value else [])
         else:
-            raise NotImplementedError('field {}'.format(field))
+            if field.startswith('attr('):
+                attr = field[len('attr('):-1]
+                if cmds.attributeQuery(attr, node=n, exists=True):
+                    # normalize to strings
+                    value = str(cmds.getAttr(n + '.' + attr))
+            else:
+	            raise NotImplementedError('field {!r}'.format(field))
         cache[n][field] = value
 
 
@@ -125,7 +159,7 @@ def _handle_expression(result, cache):
                             for ccc in cache[cc][field]}
                         for n, c in relationship.items()
                     }
-                elif field in {'layer', 'parent'}:
+                else:
                     relationship = {
                         n:
                         {ccc for cc in c if cc
@@ -134,21 +168,29 @@ def _handle_expression(result, cache):
                     }
                 relationship = {n: c for n, c in relationship.items() if c}
 
-            values = data['value']
-            if isinstance(values, list):
-                values = set(values)
+            if data['operator'] == 'match':
+                pattern = re.compile(data['value'])
+                sample = set()
+                for n, c in relationship.items():
+                    for cc in c:
+                        if pattern.match(cc):
+                            sample.add(n)
+                            break
             else:
-                values = {values}
-            if 'none' in values:
-                values = values - {'none'} | {None}
-            sample = {n for n, c in relationship.items() if c & values}
+                values = data['value']
+                values = set(values) if isinstance(values, list) else {values}
+                for v in values:
+                    if v.lower() in value_mapping:
+                        values = values - {v} | {value_mapping[v.lower()]}
+
+                sample = {n for n, c in relationship.items() if c & values}
             if 'not' in data['operator']:
-                sample = cache.keys() - sample
+                invert = not invert
         else:
             sample = _handle_expression(r, cache)
 
         if invert:
-            sample = {n for n in pm.ls() if n not in sample}
+            sample = cache.keys() - sample
             invert = False
 
         objectset = joinop(objectset, sample)
@@ -167,8 +209,13 @@ def query(expression, cache=None):
 
 if __name__ in '__main__':
     cache = {}
+    # cache['IKExtracvSpine1_M_rotateY']
+    # cmds.listRelatives('initialShadingGroup', fullPath=True, parent=True)
     for i in [
             # 'name is persp',
+            # 'name is persp',
+            # 'name is persp and name is persp',
+            # 'name is persp and name is persp and name is persp',
             # 'name in (persp, top)',
             # 'name is top or name is persp',
             # 'name in (persp, top, front) and (name is top or name is persp)',
@@ -176,21 +223,24 @@ if __name__ in '__main__':
             # ('type is transform and shapes.type not_in (nurbsCurve) and '
             #  'parent is none and shapes.type is_not camera'),
             # 'type is nurbsCurve and parent.sets.name is AnimationSet',
-            # 'allsets.name is AnimationSet',
-            # 'shapes.type is_not nurbsCurve and sets.name is AnimationSet',
+            # 'allsets.name is QuickSets',
+            # 'shapes.type is_not nurbsCurve and allsets.name is AnimationSet',
             # 'type is displayLayer and name is layer1',
             # ('sets.name in (AnimationSet, ControlSet, FaceControlSet) and '
             #  'layer.name is_not controls'),
-            # 'sets.name is set1 and layer.name is layer1',
+            # ('allsets.name is all1 and layer.name is_not controls '
+            #  'and type is_not objectSet'),
             # 'name is root and parent is none',
             # 'parent.name is root',
-            'parent is none',
-            'types is dagNode',
-            'parent.parent is none',
+            # 'parent is none',
+            # 'types is dagNode',
+            # 'parent.parent is none',
+            # 'parent is_not none and default is true',
+            # 'default is true and referenced is false',
+            # 'attr(displaySmoothMesh) not_in (0, none)'
+            # 'name match "[a-zA-Z0-9]+"',
+            'parent.name match "[a-zA-Z]+\d"',
     ]:
-        logger.info('%s', i)
-        logger.info('    %s', query(i, cache=cache))
-    logger.info('pm.ls()')
-    logger.info('    %s', pm.ls())
-    logger.info('pm.ls(type="transform")')
-    logger.info('    %s', pm.ls(type='transform'))
+        start = time.time()
+        nodes = query(i, cache=cache)
+        print('{}\n\t{:.3f} {}'.format(i, time.time() - start, nodes))
