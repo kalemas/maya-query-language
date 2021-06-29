@@ -86,6 +86,7 @@ def _populate_cache(cache, nodes=(), field=None):
             for s in allsets:
                 allsets.extend(cache[s]['sets'])
             cache[k]['allsets'] = set(allsets)
+        return
     elif field == 'default':
         for n in cache.keys():
             cache[n][field] = False
@@ -101,11 +102,13 @@ def _populate_cache(cache, nodes=(), field=None):
                 '|side|sideShape',
         ]:
             cache[n][field] = True
+        return
     elif field == 'referenced':
         for n in cache.keys():
             cache[n][field] = False
         for n in cmds.ls(referencedNodes=True, long=True):
             cache[n][field] = True
+        return
     elif field == 'layer':
         for n in cache.keys():
             cache[n][field] = None
@@ -119,6 +122,7 @@ def _populate_cache(cache, nodes=(), field=None):
             for k, v in cache.items():
                 if k.startswith(n):
                     v[field] = l
+        return
 
     for n in nodes:
         if field in cache[n]:
