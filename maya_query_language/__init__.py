@@ -71,7 +71,17 @@ def _populate_cache(cache, nodes=(), field=None):
     elif field == 'default':
         for n in cache.keys():
             cache[n][field] = False
-        for n in cmds.ls(defaultNodes=True, long=True):
+        for n in cmds.ls(defaultNodes=True, long=True) + [
+                # exceptions
+                '|persp',
+                '|persp|perspShape',
+                '|top',
+                '|top|topShape',
+                '|front',
+                '|front|frontShape',
+                '|side',
+                '|side|sideShape',
+        ]:
             cache[n][field] = True
     elif field == 'referenced':
         for n in cache.keys():
@@ -108,13 +118,6 @@ def _populate_cache(cache, nodes=(), field=None):
             value.update(
                 cmds.listConnections(
                     n + '.message', d=True, s=False, type='objectSet') or [])
-        elif field == 'layer':
-            if cmds.attributeQuery('drawOverride', node=n, exists=True):
-                value = cmds.listConnections(n + '.drawOverride',
-                                             d=False,
-                                             s=True,
-                                             type='displayLayer')
-            value = value[0] if value else None
         elif field == 'parent':
             value = cmds.listRelatives(n, fullPath=True, parent=True)
             if value:
@@ -251,7 +254,7 @@ if __name__ in '__main__':
             # 'parent is_not none and default is true',
             # 'default is true and referenced is false',
             # 'attr(displaySmoothMesh) not_in (0, none)'
-            # 'name match "[a-zA-Z0-9]+"',
+            'name match "[a-zA-Z0-9]+"',
             'parent.name match "[a-zA-Z]+\d"',
     ]:
         start = time.time()
