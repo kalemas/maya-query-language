@@ -4,8 +4,18 @@ import time
 import re
 
 from maya import cmds  # NOTE pymel was slow in 20 times
-from pyparsing import (alphanums, delimitedList, infixNotation, oneOf, opAssoc,
-                       Suppress, Word, quotedString, removeQuotes)
+from pyparsing import (
+    alphanums,
+    delimitedList,
+    Forward,
+    infixNotation,
+    oneOf,
+    opAssoc,
+    quotedString,
+    removeQuotes,
+    Suppress,
+    Word,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -24,21 +34,27 @@ class ClauseExpression:
 
 
 def _build_parser():
-    field = Word(alphanums + '.()')('field')
-    operators = oneOf(['is', 'is_not', '>', '<', 'match'])('operator')
+    field = Word(alphanums + '.:')('field')
+    operators = oneOf(['is', 'is_not', 'match'])('operator')
     container_operators = oneOf(['in', 'not_in'])('operator')
+    relationship_operators = oneOf(['has'])('operator')
     value = Word(alphanums)('value')
     quoted_value = quotedString('value').setParseAction(removeQuotes)
     container_value = Suppress('(') + delimitedList(value)('value') + Suppress(
         ')')
     standard_condition = field + operators + (value | quoted_value)
     container_condition = field + container_operators + container_value
-    condition = (standard_condition | container_condition)
+    forward = Forward()
+    relationship_condition = field + relationship_operators + (
+        Suppress('(') + forward('value') + Suppress(')'))
+    condition = (standard_condition | container_condition |
+                 relationship_condition)
 
     condition.setParseAction(ClauseExpression)
     statement = infixNotation(condition, [('not', 1, opAssoc.RIGHT),
                                           ('and', 2, opAssoc.LEFT),
                                           ('or', 2, opAssoc.LEFT)])
+    forward <<= statement
     return statement
 
 
@@ -141,7 +157,10 @@ def _populate_cache(cache, nodes=(), field=None):
         cache[n][field] = value
 
 
-def _handle_expression(result, cache):
+def _handle_expression(result, objectset, cache):
+    if isinstance(result, ClauseExpression):
+        result = [result]
+
     invert = False
     joinop = join_operators['and']
     _populate_cache(cache)
@@ -194,6 +213,14 @@ def _handle_expression(result, cache):
                         if pattern.match(cc):
                             sample.add(n)
                             break
+            elif data['operator'] == 'has':
+                relationship_sample = _handle_expression(
+                    data['value'],
+                    {cc for c in relationship.values() for cc in c}, cache)
+                sample = {
+                    n for n, c in relationship.items()
+                    if c & relationship_sample
+                }
             else:
                 values = data['value']
                 values = set(values) if isinstance(values, list) else {values}
@@ -220,9 +247,7 @@ def query(expression, cache=None):
     if cache is None:
         cache = {}
     result = Parser.parseString(expression)
-    if isinstance(result[0], ClauseExpression):
-        result = [result]
-    return _handle_expression(result[0], cache)
+    return _handle_expression(result, None, cache)
 
 
 if __name__ in '__main__':
@@ -255,10 +280,13 @@ if __name__ in '__main__':
             # 'parent.parent is none',
             # 'parent is_not none and default is true',
             # 'default is true and referenced is false',
-            # 'attr(displaySmoothMesh) not_in (0, none)'
-            'name match "[a-zA-Z0-9]+"',
-            'parent.name match "[a-zA-Z]+\d"',
+            # 'attr:displaySmoothMesh not_in (0, none)',
+            # 'name match "[a-zA-Z0-9]+"',
+            # 'parent.name match "[a-zA-Z]+\d"',
+            ('parent.shapes has (attr:intermediateObject is true '
+             'and referenced is true)'),
     ]:
         start = time.time()
+        print(i)
         nodes = query(i, cache=cache)
-        print('{}\n\t{:.3f} {}'.format(i, time.time() - start, nodes))
+        print('\t{:.3f} {}'.format(time.time() - start, nodes))
