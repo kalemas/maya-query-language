@@ -147,11 +147,13 @@ def _populate_cache(cache, nodes=(), field=None):
             value = cmds.listRelatives(n, fullPath=True, shapes=True)
             value = set(value if value else [])
         else:
-            if field.startswith('attr('):
-                attr = field[len('attr('):-1]
+            if field.startswith('attr:'):
+                attr = field[len('attr:'):]
                 if cmds.attributeQuery(attr, node=n, exists=True):
                     # normalize to strings
-                    value = str(cmds.getAttr(n + '.' + attr))
+                    value = cmds.getAttr(n + '.' + attr)
+                    if not isinstance(value, (bool)):
+                        value = str(value)
             else:
                 raise NotImplementedError('field {!r}'.format(field))
         cache[n][field] = value
@@ -164,7 +166,9 @@ def _handle_expression(result, objectset, cache):
     invert = False
     joinop = join_operators['and']
     _populate_cache(cache)
-    objectset = cache.keys()
+    if objectset is None:
+        objectset = cache.keys()
+    resultset = objectset
 
     for r in result:
         if r == 'not':
@@ -177,7 +181,7 @@ def _handle_expression(result, objectset, cache):
         if isinstance(r, ClauseExpression):
             data = r.asDict()
             # set of object relationships according to criteria
-            relationship = {n: {n} for n in cache.keys()}
+            relationship = {n: {n} for n in objectset}
             for field in data['field'].split('.'):
                 _populate_cache(
                     cache,
@@ -232,15 +236,15 @@ def _handle_expression(result, objectset, cache):
             if 'not' in data['operator']:
                 invert = not invert
         else:
-            sample = _handle_expression(r, cache)
+            sample = _handle_expression(r, objectset, cache)
 
         if invert:
-            sample = cache.keys() - sample
+            sample = objectset - sample
             invert = False
 
-        objectset = joinop(objectset, sample)
+        resultset = joinop(resultset, sample)
 
-    return objectset
+    return resultset
 
 
 def query(expression, cache=None):
