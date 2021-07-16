@@ -76,7 +76,7 @@ def _populate_cache(cache, nodes=(), field=None):
     if not cache:
         ls = cmds.ls(showType=True, long=True)
         for n, t in zip(ls[::2], ls[1::2]):
-            cache[n] = {'name': n.split('|')[-1], 'type': t}
+            cache[n] = {'name': n.split('|')[-1], 'type': t, 'path': n}
         # something weird after listRelatives, so prevent that
         cache['initialShadingGroup']['parent'] = None
     if field in {'allsets'}:
