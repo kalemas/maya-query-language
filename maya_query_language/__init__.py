@@ -182,7 +182,7 @@ def _handle_expression(result, objectset, cache):
         if r == 'not':
             invert = True
             continue
-        if r in join_operators.keys():
+        if not isinstance(r, list) and r in join_operators.keys():
             joinop = join_operators[r]
             continue
 
@@ -295,8 +295,9 @@ if __name__ in '__main__':
             # 'attr:displaySmoothMesh not_in (0, none)',
             # 'name match "[a-zA-Z0-9]+"',
             # 'parent.name match "[a-zA-Z]+\d"',
-            ('parent.shapes has (attr:intermediateObject is true '
-             'and referenced is true)'),
+            # ('parent.shapes has (attr:intermediateObject is true '
+            #  'and referenced is true)'),
+            'parents.name in (persp, top) and not parent.name is persp',
     ]:
         start = time.time()
         print(i)
