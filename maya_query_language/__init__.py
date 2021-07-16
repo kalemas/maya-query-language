@@ -152,6 +152,8 @@ def _populate_cache(cache, nodes=(), field=None):
         elif field == 'shapes':
             value = cmds.listRelatives(n, fullPath=True, shapes=True)
             value = set(value if value else [])
+        elif field == 'parents':
+            value = {n[:i] for i in range(1, len(n)) if n[i] == '|'}
         else:
             if field.startswith('attr:'):
                 attr = field[len('attr:'):]
@@ -199,7 +201,7 @@ def _handle_expression(result, objectset, cache):
                             } for n, c in relationship.items()
                     }
                 elif field in {
-                        'allsets', 'children', 'sets', 'shapes', 'types'
+                        'allsets', 'children', 'sets', 'shapes', 'types', 'parents',
                 }:
                     relationship = {
                         n: {ccc for cc in c if cc
