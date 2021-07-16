@@ -100,6 +100,8 @@ def _populate_cache(cache, nodes=(), field=None):
                 '|front|frontShape',
                 '|side',
                 '|side|sideShape',
+                'defaultLayer',
+                'defaultRenderLayer',
         ]:
             cache[n][field] = True
         return
