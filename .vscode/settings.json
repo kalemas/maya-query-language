@@ -5,5 +5,10 @@
         "**/.*_cache": true,
         "**/*.egg-info": true,
         "**/__pycache__": true,
-    }
+    },
+    "editor.rulers": [
+        {
+            "column": 80
+        }
+    ]
 }
