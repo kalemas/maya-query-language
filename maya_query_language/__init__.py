@@ -154,6 +154,12 @@ def _populate_cache(cache, nodes=(), field=None):
             value = set(value if value else [])
         elif field == 'parents':
             value = {n[:i] for i in range(1, len(n)) if n[i] == '|'}
+        elif field == 'inputs':
+            value = cmds.ls(cmds.listConnections(
+                n, source=True, destination=False, shapes=True), long=True)
+        elif field == 'outputs':
+            value = cmds.ls(cmds.listConnections(
+                n, source=False, destination=True, shapes=True), long=True)
         else:
             if field.startswith('attr:'):
                 attr = field[len('attr:'):]
@@ -201,7 +207,8 @@ def _handle_expression(result, objectset, cache):
                             } for n, c in relationship.items()
                     }
                 elif field in {
-                        'allsets', 'children', 'sets', 'shapes', 'types', 'parents',
+                        'allsets', 'children', 'sets', 'shapes', 'types',
+                        'parents', 'inputs', 'outputs',
                 }:
                     relationship = {
                         n: {ccc for cc in c if cc
