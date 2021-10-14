@@ -71,6 +71,11 @@ value_mapping = {
     'true': True,
 }
 
+one_to_many_fields = {
+    'allsets', 'children', 'sets', 'shapes', 'types',
+    'parents', 'inputs', 'outputs',
+}
+
 
 def _populate_cache(cache, nodes=(), field=None):
     if not cache:
@@ -201,15 +206,7 @@ def _handle_expression(result, objectset, cache):
                     cache,
                     {cc for c in relationship.values() for cc in c if cc},
                     field)
-                if field in {'name', 'type'}:
-                    relationship = {
-                        n: {cache[cc][field] for cc in c if cc
-                            } for n, c in relationship.items()
-                    }
-                elif field in {
-                        'allsets', 'children', 'sets', 'shapes', 'types',
-                        'parents', 'inputs', 'outputs',
-                }:
+                if field in one_to_many_fields:
                     relationship = {
                         n: {ccc for cc in c if cc
                             for ccc in cache[cc][field]}
