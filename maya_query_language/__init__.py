@@ -97,16 +97,19 @@ def _populate_cache(cache, nodes=(), field=None):
             cache[n][field] = False
         for n in cmds.ls(defaultNodes=True, long=True) + [
                 # exceptions
-                '|persp',
-                '|persp|perspShape',
-                '|top',
-                '|top|topShape',
                 '|front',
                 '|front|frontShape',
+                '|persp',
+                '|persp|perspShape',
                 '|side',
                 '|side|sideShape',
+                '|top',
+                '|top|topShape',
                 'defaultLayer',
                 'defaultRenderLayer',
+                'layerManager',
+                'lightLinker1',
+                'renderLayerManager',
         ]:
             cache[n][field] = True
         return
@@ -138,19 +141,10 @@ def _populate_cache(cache, nodes=(), field=None):
         if field == 'types':
             value = cmds.nodeType(n, inherited=True)
         elif field == 'sets':
-            if cmds.attributeQuery('instObjGroups', node=n, exists=True):
-                value = cmds.listConnections(n + '.instObjGroups',
-                                             d=True,
-                                             s=False,
-                                             type='objectSet')
+            value = cmds.listSets(object=n)
             value = set(value if value else [])
-            value.update(
-                cmds.listConnections(
-                    n + '.message', d=True, s=False, type='objectSet') or [])
         elif field == 'parent':
-            value = cmds.listRelatives(n, fullPath=True, parent=True)
-            if value:
-                value = value[0]
+            value = (n[:n.rfind('|')] if n[0] == '|' else None) or None
         elif field == 'children':
             value = cmds.listRelatives(n, fullPath=True, children=True)
             value = set(value if value else [])
