@@ -300,4 +300,5 @@ if __name__ in '__main__':
         start = time.time()
         print(i)
         nodes = query(i, cache=cache)
-        print('\t{:.3f} {}'.format(time.time() - start, nodes))
+        print('\t{:.3f} for {} nodes {}'.format(
+            time.time() - start, len(nodes), nodes))
