@@ -71,105 +71,121 @@ value_mapping = {
     'true': True,
 }
 
-one_to_many_fields = {
-    'allsets', 'children', 'sets', 'shapes', 'types',
-    'parents', 'inputs', 'outputs',
-}
+class DataHandler(dict):
+    one_to_many_fields = {
+        'allsets', 'children', 'sets', 'shapes', 'types',
+        'parents', 'inputs', 'outputs',
+    }
 
+    def __init__(self):
+        self.clear()
 
-def _populate_cache(cache, nodes=(), field=None):
-    if not cache:
-        ls = cmds.ls(showType=True, long=True)
-        for n, t in zip(ls[::2], ls[1::2]):
-            cache[n] = {'name': n.split('|')[-1], 'type': t, 'path': n}
-        # something weird after listRelatives, so prevent that
-        cache['initialShadingGroup']['parent'] = None
-    if field in {'allsets'}:
-        _populate_cache(cache, cache.keys(), 'sets')
-        for k, v in cache.items():
-            allsets = list(v['sets'])
-            for s in allsets:
-                allsets.extend(cache[s]['sets'])
-            cache[k]['allsets'] = set(allsets)
-        return
-    elif field == 'default':
-        for n in cache.keys():
-            cache[n][field] = False
-        for n in cmds.ls(defaultNodes=True, long=True) + [
-                # exceptions
-                '|front',
-                '|front|frontShape',
-                '|persp',
-                '|persp|perspShape',
-                '|side',
-                '|side|sideShape',
-                '|top',
-                '|top|topShape',
-                'defaultLayer',
-                'defaultRenderLayer',
-                'layerManager',
-                'lightLinker1',
-                'renderLayerManager',
-        ]:
-            cache[n][field] = True
-        return
-    elif field == 'referenced':
-        for n in cache.keys():
-            cache[n][field] = False
-        for n in cmds.ls(referencedNodes=True, long=True):
-            cache[n][field] = True
-        return
-    elif field == 'layer':
-        for n in cache.keys():
-            cache[n][field] = None
-        items = {
-            n: c for c in cmds.ls(type='displayLayer', long=True)
-            for n in cmds.ls(
-                cmds.listConnections(c + '.drawInfo', d=True, s=False) or [],
-                long=True)
-        }
-        for n, l in sorted(items.items(), reverse=True):
-            for k, v in cache.items():
-                if k.startswith(n):
-                    v[field] = l
-        return
+    def clear(self):
+        super(DataHandler, self).clear()
+        self._populated = set()
 
-    for n in nodes:
-        if field in cache[n]:
-            continue
-        value = None
-        if field == 'types':
-            value = cmds.nodeType(n, inherited=True)
-        elif field == 'sets':
-            value = cmds.listSets(object=n)
-            value = set(value if value else [])
-        elif field == 'parent':
-            value = (n[:n.rfind('|')] if n[0] == '|' else None) or None
-        elif field == 'children':
-            value = cmds.listRelatives(n, fullPath=True, children=True)
-            value = set(value if value else [])
-        elif field == 'shapes':
-            value = cmds.listRelatives(n, fullPath=True, shapes=True)
-            value = set(value if value else [])
-        elif field == 'parents':
-            value = {n[:i] for i in range(1, len(n)) if n[i] == '|'}
-        elif field == 'inputs':
-            value = cmds.ls(cmds.listConnections(
-                n, source=True, destination=False, shapes=True), long=True)
-        elif field == 'outputs':
-            value = cmds.ls(cmds.listConnections(
-                n, source=False, destination=True, shapes=True), long=True)
-        else:
-            if field.startswith('attr:'):
-                attr = field[len('attr:'):]
-                if cmds.attributeQuery(attr, node=n, exists=True):
-                    # normalize to strings
-                    value = cmds.getAttr(n + '.' + attr)
-                    if not isinstance(value, (bool)):
-                        value = str(value)
+    def populate(self, field, nodes):
+        if not self:
+            ls = cmds.ls(showType=True, long=True)
+            for n, t in zip(ls[::2], ls[1::2]):
+                self[n] = {'name': n.split('|')[-1], 'type': t, 'path': n}
+            # something weird after listRelatives, so prevent that
+            self['initialShadingGroup']['parent'] = None
+        if field in self._populated:
+            return
+        if field in {'allsets'}:
+            self.populate('sets', self.keys())
+            for k, v in self.items():
+                allsets = list(v['sets'])
+                for s in allsets:
+                    allsets.extend(self[s]['sets'])
+                self[k]['allsets'] = set(allsets)
+            self._populated.add(field)
+            return
+        elif field == 'default':
+            for n in self.keys():
+                self[n][field] = False
+            for n in cmds.ls(defaultNodes=True, long=True) + [
+                    # exceptions
+                    '|front',
+                    '|front|frontShape',
+                    '|persp',
+                    '|persp|perspShape',
+                    '|side',
+                    '|side|sideShape',
+                    '|top',
+                    '|top|topShape',
+                    'defaultBrush',
+                    'defaultLayer',
+                    'defaultRenderLayer',
+                    'layerManager',
+                    'lightLinker1',
+                    'renderLayerManager',
+                    ]:
+                if n in self:
+                    self[n][field] = True
+            self._populated.add(field)
+            return
+        elif field == 'referenced':
+            for n in self.keys():
+                self[n][field] = False
+            for n in cmds.ls(referencedNodes=True, long=True):
+                self[n][field] = True
+            self._populated.add(field)
+            return
+        elif field == 'layer':
+            for n in self.keys():
+                self[n][field] = None
+            items = {
+                n: c
+                for c in cmds.ls(type='displayLayer', long=True)
+                for n in cmds.ls(cmds.listConnections(
+                    c + '.drawInfo', d=True, s=False) or [],
+                                 long=True)
+            }
+            for n, l in sorted(items.items(), reverse=True):
+                for k, v in self.items():
+                    if k.startswith(n):
+                        v[field] = l
+            self._populated.add(field)
+            return
+
+        for n in nodes:
+            if field in self[n]:
+                continue
+            value = None
+            if field == 'types':
+                value = cmds.nodeType(n, inherited=True)
+            elif field == 'sets':
+                value = cmds.listSets(object=n)
+                value = set(value if value else [])
+            elif field == 'parent':
+                value = (n[:n.rfind('|')] if n[0] == '|' else None) or None
+            elif field == 'children':
+                value = cmds.listRelatives(n, fullPath=True, children=True)
+                value = set(value if value else [])
+            elif field == 'shapes':
+                value = cmds.listRelatives(n, fullPath=True, shapes=True)
+                value = set(value if value else [])
+            elif field == 'parents':
+                value = {n[:i] for i in range(1, len(n)) if n[i] == '|'}
+            elif field == 'inputs':
+                value = cmds.ls(cmds.listConnections(
+                    n, source=True, destination=False, shapes=True), long=True)
+            elif field == 'outputs':
+                value = cmds.ls(cmds.listConnections(
+                    n, source=False, destination=True, shapes=True), long=True)
             else:
-                raise NotImplementedError('field {!r}'.format(field))
-        cache[n][field] = value
+                if field.startswith('attr:'):
+                    attr = field[len('attr:'):]
+                    if cmds.attributeQuery(attr, node=n, exists=True):
+                        # normalize to strings
+                        value = cmds.getAttr(n + '.' + attr)
+                        if not isinstance(value, (bool)):
+                            value = str(value)
+                else:
+                    raise NotImplementedError('field {!r}'.format(field))
+            self[n][field] = value
 
 
 def _handle_expression(result, objectset, cache):
@@ -178,7 +194,6 @@ def _handle_expression(result, objectset, cache):
 
     invert = False
     joinop = join_operators['and']
-    _populate_cache(cache)
     if objectset is None:
         objectset = cache.keys()
     resultset = objectset
@@ -196,11 +211,11 @@ def _handle_expression(result, objectset, cache):
             # set of object relationships according to criteria
             relationship = {n: {n} for n in objectset}
             for field in data['field'].split('.'):
-                _populate_cache(
-                    cache,
-                    {cc for c in relationship.values() for cc in c if cc},
-                    field)
-                if field in one_to_many_fields:
+                cache.populate(
+                    field,
+                    {cc
+                     for c in relationship.values() for cc in c if cc})
+                if field in cache.one_to_many_fields:
                     relationship = {
                         n: {ccc for cc in c if cc
                             for ccc in cache[cc][field]}
@@ -255,7 +270,7 @@ def _handle_expression(result, objectset, cache):
 
 def query(expression, cache=None):
     if cache is None:
-        cache = {}
+        cache = DataHandler()
     result = Parser.parseString(expression)
     return _handle_expression(result, None, cache)
 
