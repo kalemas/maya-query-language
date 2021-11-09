@@ -91,6 +91,7 @@ class DataHandler(dict):
                 self[n] = {'name': n.split('|')[-1], 'type': t, 'path': n}
             # something weird after listRelatives, so prevent that
             self['initialShadingGroup']['parent'] = None
+            self._populated |= {'name', 'type', 'path'}
         if field in self._populated:
             return
         if field in {'allsets'}:
@@ -195,6 +196,7 @@ def _handle_expression(result, objectset, cache):
     invert = False
     joinop = join_operators['and']
     if objectset is None:
+        cache.populate('name', ())
         objectset = cache.keys()
     resultset = objectset
 
