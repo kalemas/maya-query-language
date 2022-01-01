@@ -2,7 +2,7 @@
 
 This was experimental project aimed to settle convinient serializeable protocol 
 to query objects in maya scene. Unfortunately cache population take too much 
-and found that serializeable protocol would be easily setup with `exec()` with 
+and found that serializeable protocol would be easily setup with `eval()` with 
 adding some convenience:
 
 ```
@@ -13,7 +13,7 @@ def ls(*args, **kwargs):
    
 def get_objects(expression):
     """
-    expression is a string of python string e.g. "ls(assemblies=True) - ls(camera=True)"
+    expression is a evaluatable string e.g. "ls(assemblies=True) - ls(camera=True)"
     """
     return eval(expression, globals())
 ```
