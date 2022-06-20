@@ -1,4 +1,4 @@
-# Maya DB style object querying
+# [Deprecated] Maya DB style object querying
 
 This was experimental project aimed to settle convinient serializeable protocol 
 to query objects in maya scene. Unfortunately cache population take too much 
